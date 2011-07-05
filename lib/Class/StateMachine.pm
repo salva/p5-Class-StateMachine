@@ -1,60 +1,48 @@
-package Class::StateMachine::Private;
+package Class::StateMachine;
 
 our $VERSION = '0.12';
 
+package Class::StateMachine::Private;
+
+use 5.010;
 use strict;
 use warnings;
 use Carp;
 
-use Scalar::Util qw(refaddr);
+use Hash::Util qw(fieldhash);
 
-my ( %state,
-     %class_isa_stateful,
+fieldhash my %state;
+my ( %class_isa_stateful,
      %class_bootstrapped );
 
 sub _state {
     my $self = shift;
-    my $addr = refaddr($self)
-	or croak "can't get/set state on non object";
     if (@_) {
-	my $state = shift;
-	$state{$addr} = $state;
-	my $base_class = ref($self);
-	$base_class =~ s|::__state__::.*$||;
-	my $class = _bootstrap_state_class($base_class, $state);
-	bless $self, $class;
+        my $base_class = ref($self);
+        $base_class =~ s|::__state__::.*$||;
+	if (defined (my $state = shift)) {
+            $state{$self} = $state;
+            my $class = _bootstrap_state_class($base_class, $state);
+            bless $self, $class;
+        }
+        else {
+            delete $state{$self};
+            bless $self, $base_class;
+        }
     }
-    $state{$addr}
+    $state{$self}
 }
 
 sub _rebless {
-    my $self = shift;
-    my $addr = refaddr($self)
-	or croak "can't rebless non object";
-    if (my $state = $state{$addr}) {
-	my $base_class;
-	if (@_) {
-	    $base_class = shift;
-	}
-	else {
-	    $base_class = ref($self);
-	    $base_class =~ s|::__state__::.*||;
-	}
-	my $class = _bootstrap_state_class($base_class, $state);
-	bless $self, $class;
-    }
-    elsif (@_) {
-	bless $self, shift
-    }
+    my ($self, $base_class) = @_;
+    $base_class //= caller;
+    my $state = delete $state{$self};
+    bless $self, $class;
+    _state($self, $state) if defined $state;
     $self
 }
 
-sub _destroy {
-    my $self = shift;
-    my $addr = refaddr($self)
-	or croak "can't get/set state on non object";
-    delete $state{$addr};
-}
+sub _destroy {}
 
 sub _bootstrap_class {
     my $class = shift;
@@ -92,14 +80,12 @@ sub _bootstrap_methods_class {
 
 my @state_methods;
 
-use Devel::Peek;
+use Devel::Peek 'CvGV';
 sub _handle_attr_OnState {
     my ($class, $sub, $on_state) = @_;
 
     push @state_methods, [$class, $sub, $on_state];
 }
-
-use Devel::Peek 'CvGV';
 
 CHECK {
     for (@state_methods) {

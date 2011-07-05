@@ -8,7 +8,7 @@ package SM;
 use warnings;
 no warnings 'redefine';
 
-use base 'Class::StateMachine';
+use parent 'Class::StateMachine';
 
 sub foo : OnState(one) { 1 }
 
@@ -20,6 +20,9 @@ sub bar : OnState(__any__) { 'any' }
 
 sub bar : OnState(five, six, seven) { 7 }
 
+sub :OnStateLeave(five, dozen, moo) {
+
+}
 
 sub new {
     my $class=shift;
