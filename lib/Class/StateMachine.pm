@@ -8,11 +8,6 @@ use Carp;
 
 use Scalar::Util qw(refaddr);
 
-sub warnings_enabled {
-    package Class::StateMachine;
-    warnings::enabled;
-}
-
 my ( %state,
      %class_isa_stateful,
      %class_bootstrapped );
