@@ -1,0 +1,7 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+t/Class-StateMachine.t
+lib/Class/StateMachine.pm
+META.yml                                 Module meta-data (added by MakeMaker)
