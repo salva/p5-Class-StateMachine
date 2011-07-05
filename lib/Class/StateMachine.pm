@@ -15,31 +15,42 @@ fieldhash my %state;
 my ( %class_isa_stateful,
      %class_bootstrapped );
 
-sub _state {
+sub _init {
     my $self = shift;
-    if (@_) {
-        my $base_class = ref($self);
-        $base_class =~ s|::__state__::.*$||;
-	if (defined (my $state = shift)) {
-            $state{$self} = $state;
-            my $class = _bootstrap_state_class($base_class, $state);
-            bless $self, $class;
-        }
-        else {
-            delete $state{$self};
-            bless $self, $base_class;
-        }
-    }
-    $state{$self}
+    my $base_class = ref($self);
+    my $class = _bootstrap_state_class($base_class, ($state{$self} //= 'new'));
+    bless $self, $class;
 }
 
-sub _rebless {
+sub _state {
+    my ($self, $new_state) = @_;
+    defined $state{$self} or _init($self);
+    if (defined $new_state) {
+        my $old_state = $state{$self};
+        return $old_state if $new_state eq $old_state;
+        my $leave = $self->can('leave_state');
+        if ($leave) {
+            $leave->($self, $old_state, $new_state);
+            return $state{$self} if $state{$self} ne $old_state;
+        }
+        my $base_class = ref($self);
+        $base_class =~ s|::__state__::.*$||;
+        my $class = _bootstrap_state_class($base_class, $new_state);
+        bless $self, $class;
+        $state{$self} = $new_state;
+        my $enter = $self->can('enter_state');
+        if ($enter) {
+            $enter->($self, $new_state, $old_state);
+        }
+    }
+    $state{$self};
+}
+
+sub _bless {
     my ($self, $base_class) = @_;
     $base_class //= caller;
-    my $state = delete $state{$self};
+    my $class = _bootstrap_state_class($base_class, ($state{$self} //= 'new'));
     bless $self, $class;
-    _state($self, $state) if defined $state;
-    $self
 }
 
 sub _destroy {}
@@ -91,10 +102,6 @@ CHECK {
     for (@state_methods) {
 	my ($class, $sub, $on_state) = @$_;
 	my $sym = CvGV($sub);
-	
-	# print STDERR "sub name: $sym\n";
-	
-	# Devel::Peek::Dump($sym);
 	my ($method) = $sym=~/::([^:]+)$/
 	    or croak "invalid symbol name '$sym'";
 
@@ -108,7 +115,6 @@ CHECK {
 	    warnings::warnif('Class::StateMachine',
 			     'no states on OnState attribute declaration');
 	}
-	
 	no strict 'refs';
 	for my $state (@on_state) {
 	    $state = '__any__' unless defined $state;
@@ -137,7 +143,8 @@ sub MODIFY_CODE_ATTRIBUTES {
 }
 
 *state = \&Class::StateMachine::Private::_state;
-*rebless = \&Class::StateMachine::Private::_rebless;
+*rebless = \&Class::StateMachine::Private::_bless;
+*bless = \&Class::StateMachine::Private::_bless;
 
 *DESTROY = \&Class::StateMachine::Private::_destroy;
 
@@ -153,7 +160,7 @@ Class::StateMachine - define classes for state machines
   package MySM;
   no warnings 'redefine';
 
-  use base 'Class::StateMachine';
+  use parent 'Class::StateMachine';
 
   sub foo : OnState(one) { print "on state one\n" }
   sub foo : OnState(two) { print "on state two\n" }
@@ -162,7 +169,7 @@ Class::StateMachine - define classes for state machines
   sub bar : OnState(three, five, seven) { print "on several states\n" }
   sub bar : OnState(one) { print "on state one\n" }
 
-  sub new { bless {}, shift }
+  sub new { Class::StateMachine::bless {}, shift }
 
   package main;
 
