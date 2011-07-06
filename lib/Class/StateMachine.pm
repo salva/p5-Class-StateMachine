@@ -10,7 +10,7 @@ use warnings;
 use Carp;
 
 use mro;
-use MRO::Define;
+# use MRO::Define;
 use Hash::Util qw(fieldhash);
 use Devel::Peek 'CvGV';
 use Package::Stash;
@@ -64,11 +64,16 @@ sub _bootstrap_state_class {
         # disallow control characters and colons inside state names:
         $state =~ m|^[\x21-\x39\x3b-\x7f]+$| or croak "'$state' is not a valid state name";
 	$class_bootstrapped{$state_class} = 1;
+
+        my @linear = @{mro::get_linear_isa($class)};
+        my @derived = grep { $_->isa('Class::StateMachine') } @linear;
+        my @on_state = grep mro::get_pkg_gen($_), ( map(join('::', $_, '__methods__', $state   ), @derived),
+                                                    map(join('::', $_, '__methods__', '__any__'), @derived) );
+        print "mro $class/$state [@linear] => [@on_state]\n";
 	no strict 'refs';
-        @{$state_class.'::ISA'} = $class;
+        @{$state_class.'::ISA'} = (@on_state, $class);
         ${$state_class.'::state'} = $state;
         ${$state_class.'::base_class'} = $class;
-        mro::set_mro($state_class, 'statemachine');
     }
     return $state_class;
 }
@@ -164,14 +169,16 @@ sub _statemachine_mro {
     my @linear = @{mro::get_linear_isa($base_class)};
     my @derived = grep { $_->isa('Class::StateMachine') } @linear;
     my @on_state = grep mro::get_pkg_gen($_), ( map(join('::', $_, '__methods__', $state   ), @derived),
-                     map(join('::', $_, '__methods__', '__any__'), @derived) );
+                                                map(join('::', $_, '__methods__', '__any__'), @derived) );
     no strict 'refs';
     #${"${_}::inuse"} = 1 for @on_state;
-    # print "mro $base_class/$state [@linear] => [@on_state]\n";
-    [@on_state, @linear]
+    print "mro $base_class/$state [@linear] => [@on_state]\n";
+    [@on_state, @linear];
 }
 
-MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
+
+
+# MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
 
 CHECK {
     warn "CHECKing";
@@ -199,6 +206,48 @@ sub ref {
 }
 
 sub DESTROY {}
+
+# sub AUTOLOAD {
+#     our $AUTOLOAD;
+#     my $method = $AUTOLOAD;
+#     $method =~ s/.*:://;
+#     my $self = $_[0];
+#     Carp::croak("Undefined subroutine ");
+#             my $state = $state{$self};
+#             if ($state) {
+#                 my @mro = @{mro::get_linear_isa(ref $self)};
+#                 my @methods;
+#                 my $ref = Class::StateMachine::ref($self);
+#                 my @base_class_linear = @{mro::get_linear_isa($ref)};
+#                 for my $base_class (@base_class_linear) {
+#                     if (exists ${"${base_class}::"}{"__methods__::"}) {
+#                         for my $state (keys %{"${base_class}::__methods__::"}) {
+#                             exists ${"${base_class}::__methods__::${state}"}{$method} and
+#                                 push @methods, "${base_class}::__methods__::${state}$method";
+#                         }
+#                     }
+#                 }
+#                 # @methods = map { $_ => Dumper(\&{$_}) } @methods;
+#                 print join("\n",
+#                            "No particular method ${class}::${method} defined for state $state on obj $self.",
+#                            "The base class is $ref",
+#                            "The existent OnState submethods are:",
+#                            "  " . join("\n  ", @methods),
+#                            "The mro is:",
+#                            "  " . join("\n  ", @mro),
+#                            "...");
+#                 for (@methods) {
+#                     my $sub = \&{$_};
+#                     print "calling $_($self), sub=$sub\n";
+#                     print $sub->($self);
+#                     print "\n";
+#                 }
+#                 croak "foo!";
+#             } else {
+#                 croak "method ${class}::${method} called before setting the state on obj $self";
+#             }
+#         };
+# }
 
 1;
 __END__
