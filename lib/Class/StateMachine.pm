@@ -9,11 +9,11 @@ use strict;
 use warnings;
 use Carp;
 
-# use mro;
-# use MRO::Define;
+use mro;
+use MRO::Define;
 use Hash::Util qw(fieldhash);
 use Devel::Peek 'CvGV';
-#use Package::Stash;
+use Package::Stash;
 
 fieldhash my %state;
 my ( %class_isa_stateful,
@@ -27,7 +27,7 @@ sub _init {
 }
 
 sub _state {
-    my ($self, $new_state) = @_;
+    my($self, $new_state) = @_;
     defined $state{$self} or _init($self);
     if (defined $new_state) {
         my $old_state = $state{$self};
@@ -68,7 +68,7 @@ sub _bootstrap_state_class {
         @{$state_class.'::ISA'} = $class;
         ${$state_class.'::state'} = $state;
         ${$state_class.'::base_class'} = $class;
-        # mro::set_mro($state_class, 'statemachine');
+        mro::set_mro($state_class, 'statemachine');
     }
     return $state_class;
 }
@@ -88,6 +88,9 @@ sub _move_state_methods {
 	my ($class, $sub, $on_state) = @$_;
 	my $sym = CvGV($sub);
 	my ($method) = $sym=~/::([^:]+)$/ or croak "invalid symbol name '$sym'";
+
+        my $stash = Package::Stash->new($class);
+        $stash->remove_symbol("&$method");
 
         my (@on_state, $err);
         do {
@@ -111,9 +114,7 @@ sub _move_state_methods {
             # print "sub is:\n", Dumper($sub), "\n";
 	}
 	no warnings;
-        #my $stash = Package::Stash->new($class);
-        #$stash->remove_symbol("&$method");
-        *{"${class}::$method"} = sub { say "hello!" };
+        # *{"${class}::$method"} = sub { say "hello!" };
 	# *{$class.'::'.$method} =
 	#     sub {
 	# 	my $self = shift;
@@ -166,11 +167,11 @@ sub _statemachine_mro {
                      map(join('::', $_, '__methods__', '__any__'), @derived) );
     no strict 'refs';
     ${"${_}::inuse"} = 1 for @on_state;
-    print "mro $base_class/$state [@linear] => [@on_state]\n";
+    # print "mro $base_class/$state [@linear] => [@on_state]\n";
     [@on_state, @linear]
 }
 
-# MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
+MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
 
 CHECK {
     warn "CHECKing";
