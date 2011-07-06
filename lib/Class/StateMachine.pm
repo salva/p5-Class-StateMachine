@@ -163,10 +163,10 @@ sub _statemachine_mro {
     my $state = ${$stash->{state}};
     my @linear = @{mro::get_linear_isa($base_class)};
     my @derived = grep { $_->isa('Class::StateMachine') } @linear;
-    my @on_state = ( map(join('::', $_, '__methods__', $state   ), @derived),
+    my @on_state = grep mro::get_pkg_gen($_), ( map(join('::', $_, '__methods__', $state   ), @derived),
                      map(join('::', $_, '__methods__', '__any__'), @derived) );
     no strict 'refs';
-    ${"${_}::inuse"} = 1 for @on_state;
+    #${"${_}::inuse"} = 1 for @on_state;
     # print "mro $base_class/$state [@linear] => [@on_state]\n";
     [@on_state, @linear]
 }
