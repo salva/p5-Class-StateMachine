@@ -78,18 +78,12 @@ sub _bootstrap_state_class {
         $state =~ m|^[\x21-\x39\x3b-\x7f]+$| or croak "'$state' is not a valid state name";
 	$class_bootstrapped{$state_class} = 1;
 
-        # my @linear = @{mro::get_linear_isa($class)};
-        # my @derived = grep { $_->isa('Class::StateMachine') } @linear;
-        # my @on_state = grep mro::get_pkg_gen($_), ( map(join('::', $_, '__methods__', $state   ), @derived),
-        # print "mro $class/$state [@linear] => [@on_state]\n";
-
 	no strict 'refs';
         @{$state_class.'::ISA'} = $class;
         # @{$state_class.'::ISA'} = (@on_state, $class);
         ${$state_class.'::state'} = $state;
         ${$state_class.'::base_class'} = $class;
         ${$state_class.'::state_class'} = $state_class;
-
         mro::set_mro($state_class, 'statemachine');
     }
     return $state_class;
@@ -119,16 +113,6 @@ sub _move_state_methods {
 
         my $stash = Package::Stash->new($class);
         $stash->remove_symbol("&$method");
-
-        print "\@on_state: @on_state\n";
-
-        #my (@on_state, $err);
-        #do {
-        #    local $@;
-	#    @on_state = _eval_states "package $class; $on_state";
-        #    $err = $@;
-	#};
-	# croak("error inside OnState attribute declaration: $err") if $err;
 
 	for my $state (@on_state) {
             my $methods_class = join('::', $class, '__methods__', ($state // '__any__'));
@@ -161,11 +145,6 @@ sub _statemachine_mro {
 }
 
 MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
-
-#CHECK {
-#    warn "CHECKing";
-#    _move_state_methods;
-#}
 
 package Class::StateMachine;
 use warnings::register;
@@ -252,7 +231,15 @@ Class::StateMachine - define classes for state machines
   sub bar : OnState(three, five, seven) { print "on several states\n" }
   sub bar : OnState(one) { print "on state one\n" }
 
-  sub new { Class::StateMachine::bless {}, shift }
+  sub new {
+      my $class = shift;
+      my $self = {};
+      Class::StateMachine::bless $self, $class;
+      $self;
+  }
+
+  sub leave_state : OnState(one) { print "leaveing state $_[1] from $_[2]" }
+  sub enter_state : OnState(two) { print "entering state $_[1] from $_[2]" }
 
   package main;
 
@@ -265,17 +252,32 @@ Class::StateMachine - define classes for state machines
   $sm->foo; # prints "on state two"
 
 
-
 =head1 DESCRIPTION
 
 Class::StateMachine lets define, via the C<OnState> attribute, methods
 that are dispatched depending on an internal C<state> property.
 
-=head2 METHODS
+=head2 Internals
+
+This module internally plays with the inheritance chain creating new
+classes and reblessing objects on the fly and (ab)using the L<mro>
+mechanism in funny ways.
+
+=head2 API
 
 These methods are available on objects of this class:
 
 =over 4
+
+=item Class::StateMachine::bless($obj, $class)
+
+=item $obj-E<gt>bless($class)
+
+Sets or changes the object class in a manner compatible with Class::StateMachine.
+
+This function must be used as the way to create new objetcs of classes
+derived from Class::StateMachine.
+
 
 =item $obj-E<gt>state
 
@@ -283,29 +285,70 @@ gets the object state
 
 =item $obj-E<gt>state($new_state)
 
-changes the object state
+Changes the object state.
 
-=item $obj-E<gt>rebless($class)
+This method calls, the methods C<check_state>, C<leave_state> and
+C<enter_state> if they are defined in the class or its subclasses for
+the corresponding state.
 
-changes the object class in a compatible manner, target class should
-also be derived from Class::StateMachine.
+If C<$new_state> equals the current object state, this method does
+nothing (including not invoking the callback methods).
+
+=over 4
+
+=item $self->check_state($new_state)
+
+This callback can be used to limit the set of states acceptable for
+the object. If the method returns a false value the C<state> call will
+die.
+
+If this method is not defined any state will be valid.
+
+=item $self->leave_state($old_state, $new_state)
+
+This method is called just before changing the state.
+
+It the state is changed from its inside to something different than
+$old_state, the requested state change is canceled.
+
+=item $self->enter_state($new_state, $old_state)
+
+This method is called just after changing the state to the new value.
+
+=back
+
+The module maintains object state is maintained using a
+L<Hash::Util::FieldHash>, so it does not requide the object
+representaion to be of any particular type (HASH, ARRAY, GLOB, etc.).
+
+=item Class::StateMachine::ref($obj)
+
+=item $obj-E<gt>ref
+
+Returns the class of the object without the parts related to
+Class::StateMachine magic.
 
 =back
 
 =head1 BUGS
 
-Because of certain limitations in current perl implementation of
-attributed subroutines, attributes have to be processed on CHECK
-blocks. That means that they will not be available before that, for
-instance, on module initialization, or in BEGIN blocks.
+Passing several states in the same submethod definition can break the
+next::method machinerie from the mro package.
+
+For instace:
+
+  sub foo :OnState(one, two, three) { shift->next::method(@_) }
+
+may not work as expected.
 
 =head1 SEE ALSO
 
-L<attributes>, L<perlsub>, L<perlmod>, L<warnings>, L<Attribute::Handlers>.
+L<attributes>, L<perlsub>, L<perlmod>, L<warnings>,
+L<Attribute::Handlers>, L<mro>, L<MRO::Define>.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003-2006 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (C) 2003-2006, 2011 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
