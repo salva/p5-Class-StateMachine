@@ -9,7 +9,6 @@ use 5.010001;
 sub _eval_states {
     # we want the state declarations evaluated inside a clean
     # environment (lexical free):
-    print STDERR "evaluating $_[0]\n";
     eval $_[0]
 }
 
@@ -28,22 +27,15 @@ fieldhash my %state;
 my ( %class_isa_stateful,
      %class_bootstrapped );
 
-sub _init {
-    my $self = shift;
-    my $base_class = ref($self);
-    my $class = _bootstrap_state_class($base_class, ($state{$self} //= 'new'));
-    bless $self, $class;
-}
-
 sub _state {
     my($self, $new_state) = @_;
-    defined $state{$self} or _init($self);
+    $state{$self} // croak("object $self has no state, are you using Class::StateMachine::bless?");
     if (defined $new_state) {
         my $old_state = $state{$self};
         return $old_state if $new_state eq $old_state;
         my $check = $self->can('check_state');
         if ($check) {
-            $check->($self, $new_state) or croak qq(invalid state "$state");
+            $check->($self, $new_state) or croak qq(invalid state "$new_state");
         }
         my $leave = $self->can('leave_state');
         if ($leave) {
@@ -53,6 +45,7 @@ sub _state {
         my $base_class = ref($self);
         $base_class =~ s|::__state__::.*$||;
         my $class = _bootstrap_state_class($base_class, $new_state);
+        # warn "blessing $self into $class";
         bless $self, $class;
         $state{$self} = $new_state;
         my $enter = $self->can('enter_state');
@@ -64,9 +57,16 @@ sub _state {
 }
 
 sub _bless {
-    my ($self, $base_class) = @_;
+    my ($self, $base_class, $state) = @_;
     $base_class //= caller;
-    my $class = _bootstrap_state_class($base_class, ($state{$self} //= 'new'));
+    if (defined $state) {
+        defined $state{$self} and croak "unable to change state when reblessing";
+        $state{$self} = $state;
+    }
+    else {
+        $state{$self} //= 'new';
+    }
+    my $class = _bootstrap_state_class($base_class, $state{$self});
     bless $self, $class;
 }
 
@@ -100,14 +100,15 @@ sub _handle_attr_OnState {
         $err = $@;
     };
     croak $err if $err;
+    grep(!defined, @on_state) and croak "undef is not a valid state";
     @on_state or warnings::warnif('Class::StateMachine',
                                   'no states on OnState attribute declaration');
     push @state_methods, [$class, $sub, @on_state];
 }
 
 sub _move_state_methods {
-    for (@state_methods) {
-	my ($class, $sub, @on_state) = @$_;
+    while (@state_methods) {
+	my ($class, $sub, @on_state) = @{shift @state_methods};
 	my $sym = CvGV($sub);
 	my ($method) = $sym=~/::([^:]+)$/ or croak "invalid symbol name '$sym'";
 
@@ -115,14 +116,13 @@ sub _move_state_methods {
         $stash->remove_symbol("&$method");
 
 	for my $state (@on_state) {
-            my $methods_class = join('::', $class, '__methods__', ($state // '__any__'));
+            my $methods_class = join('::', $class, '__methods__', $state);
 	    my $full_name = "${methods_class}::$method";
             # print "registering method at $full_name\n";
             no strict 'refs';
 	    *$full_name = subname($full_name, $sub);
 	}
     }
-    @state_methods = ();
 }
 
 # use Data::Dumper;
@@ -167,6 +167,7 @@ sub ref {
 }
 
 sub DESTROY {}
+sub import {}
 
 sub AUTOLOAD {
     our $AUTOLOAD;
@@ -238,7 +239,7 @@ Class::StateMachine - define classes for state machines
       $self;
   }
 
-  sub leave_state : OnState(one) { print "leaveing state $_[1] from $_[2]" }
+  sub leave_state : OnState(one) { print "leaving state $_[1] from $_[2]" }
   sub enter_state : OnState(two) { print "entering state $_[1] from $_[2]" }
 
   package main;
@@ -254,42 +255,188 @@ Class::StateMachine - define classes for state machines
 
 =head1 DESCRIPTION
 
-Class::StateMachine lets define, via the C<OnState> attribute, methods
-that are dispatched depending on an internal C<state> property.
+This module allows to build classes whose instance behavior (methods)
+depends not only on inheritance but also on some internal instance
+state.
 
-=head2 Internals
+For instance, suppose we want to develop a Dog class implementing the
+following behavior:
 
-This module internally plays with the inheritance chain creating new
-classes and reblessing objects on the fly and (ab)using the L<mro>
-mechanism in funny ways.
+  my $dog = Dog->new;
+  $dog->state("happy");
+  $dog->on_touched_head; # the dog will move his tail
+  $dog->state("angry");
+  $dog->on_touched_head; # the dog will bite you
 
-=head2 API
+With the help of Class::StateMachine, that state dependant behaviour
+can be easily programmed using the C<OnState> subroutine attribute as
+follows:
 
-These methods are available on objects of this class:
+  package Dog;
+
+  use parent 'Class::StateMachine';
+
+  sub on_touched_head : OnState(happy) { shift->move_tail }
+  sub on_touched_head : OnState(angry) { shift->bite }
+
+=head2 Object construction
+
+Class::StateMachine does not imposse any particular type of data
+structure for the instance objects. Any Perl reference type (HASH,
+ARRAY, SCALAR, GLOB, etc.) can be used.
+
+The unique condition is that must be fulfilled is to use the C<bless>
+subrutine provided by Class::StateMachine instead of the Perl builtin
+of the same name.
+
+For instance:
+
+  package Dog;
+
+  sub new {
+    my $class = shift;
+    my $dog = { name => 'Oscar' };
+    Class::StateMachine::bless($dog, $class, 'happy');
+  }
+
+A default state C<new> gets assigned to the object if the third
+parameter to C<Class::StateMachine::bless> is ommited.
+
+=head2 Instance state
+
+The instance state is maintained by Class::StateMachine and can be
+accessed though the L</state> method:
+
+  my $state = Dog->state;
+
+State changes must be performed explicitly calling the C<state> method
+with the new state as an argument:
+
+  Dog->state('tired');
+
+Class::StateMachine will not change the state of your objects in any
+other way.
+
+If you want to limit the possible set of states that the objects of
+some class can take, define a L<state_check> method for that class:
+
+  package Dog;
+  ...
+  sub state_check {
+    my ($self, $state) = @_;
+    $state =~ /^(?:happy|angry|tired)$/
+  }
+
+That will make die any call to C<state> requesting a change to an
+invalid state.
+
+New objects get assigned the state 'new' when they are created.
+
+=head2 Method definition
+
+Inside a class derived from Class::StateMachine, methods (submethods)
+can be assigned to some particular states using the C<OnState>
+attribute with a list of the states where it applies.
+
+  sub bark :OnState(happy, tired) { play "happy_bark.wav" }
+  sub bark :OnState(injured) { play "pitiful_bark.wav" }
+
+The text inside the OnState parents is evaluated in list context on
+the current package and with strictures turned off in order to allow
+usage of barewords.
+
+For instance:
+
+  sub foo : OnState(map "foo$_", a..z) { ... }
+
+Though note that lexicals variables will not be reachable from the
+text inside the parents. Note also that Perl does not allow attribute
+declarations to spawn over several lines.
+
+A special state C<__any__> can be used to indicate a default submethod
+that is called in case a specific submethod has not been declared for
+the current object state.
+
+For instance:
+
+  sub happy :OnState(happy  ) { say "I am happy" }
+  sub happy :OnState(__any__) { say "I am not happy" }
+
+=head2 Method resolution order
+
+What happens when you declare submethods spreaded among a class
+inheritance hierarchy?
+
+Class::StateMachine will search for the method as follows:
 
 =over 4
 
-=item Class::StateMachine::bless($obj, $class)
+=item 1
+
+Search in the inheritance tree for a specific submethod declared for
+the current object state.
+
+=item 2
+
+Search in the inheritance tree for a submethod declared for the pseudo
+state C<__any__>.
+
+=item 3
+
+Search for a regular method defined without the C<OnState> attribute.
+
+=item 4
+
+Use the AUTOLOAD mechanism.
+
+=back
+
+L<mro> can be used to set the search order inside the inheritance
+trees (for instance, the default deep-first or C3).
+
+=head2 State transitions
+
+When an object changes between two different states, the methods
+L</leave_state> and L</enter_state> are called if they are defined.
+
+Note that they can be defined using the C<OnState> attribute:
+
+  package Dog;
+  ...
+  sub enter_state :OnState(angry) { shift->bark }
+  sub enter_state :OnState(tired) { shift->lie_down }
+
+
+=head2 API
+
+These are the methods available from Class::StateMachine:
+
+=over 4
+
+=item Class::StateMachine::bless($obj, $class, $state)
 
 =item $obj-E<gt>bless($class)
 
-Sets or changes the object class in a manner compatible with Class::StateMachine.
+Sets or changes the object class in a manner compatible with
+Class::StateMachine.
 
 This function must be used as the way to create new objetcs of classes
 derived from Class::StateMachine.
 
+If the third argument C<$state> is not given, C<new> is used as the
+default.
 
 =item $obj-E<gt>state
 
-gets the object state
+X<state>Gets the object state.
 
 =item $obj-E<gt>state($new_state)
 
 Changes the object state.
 
-This method calls, the methods C<check_state>, C<leave_state> and
-C<enter_state> if they are defined in the class or its subclasses for
-the corresponding state.
+This method calls back the methods C<check_state>, C<leave_state> and
+C<enter_state> if they are defined in the class or any of its
+subclasses for the corresponding state.
 
 If C<$new_state> equals the current object state, this method does
 nothing (including not invoking the callback methods).
@@ -298,28 +445,25 @@ nothing (including not invoking the callback methods).
 
 =item $self->check_state($new_state)
 
-This callback can be used to limit the set of states acceptable for
-the object. If the method returns a false value the C<state> call will
-die.
+X<check_state>This callback can be used to limit the set of states
+acceptable for the object. If the method returns a false value the
+C<state> call will die.
 
 If this method is not defined any state will be valid.
 
 =item $self->leave_state($old_state, $new_state)
 
-This method is called just before changing the state.
+X<leave_state>This method is called just before changing the state.
 
 It the state is changed from its inside to something different than
 $old_state, the requested state change is canceled.
 
 =item $self->enter_state($new_state, $old_state)
 
-This method is called just after changing the state to the new value.
+X<enter_state>This method is called just after changing the state to
+the new value.
 
 =back
-
-The module maintains object state is maintained using a
-L<Hash::Util::FieldHash>, so it does not requide the object
-representaion to be of any particular type (HASH, ARRAY, GLOB, etc.).
 
 =item Class::StateMachine::ref($obj)
 
@@ -330,10 +474,22 @@ Class::StateMachine magic.
 
 =back
 
+=head2 Internals
+
+This module internally plays with the inheritance chain creating new
+classes and reblessing objects on the fly and (ab)using the L<mro>
+mechanism in funny ways.
+
+The objects state is maintained inside a L<Hash::Util::FieldHash>.
+
 =head1 BUGS
 
+Backward compatibility has been broken in version 0.13 in order to
+actualize the class to use modern Perl features as mro and provide
+sanner semantics.
+
 Passing several states in the same submethod definition can break the
-next::method machinerie from the mro package.
+next::method machinery from the mro package.
 
 For instace:
 
@@ -343,8 +499,8 @@ may not work as expected.
 
 =head1 SEE ALSO
 
-L<attributes>, L<perlsub>, L<perlmod>, L<warnings>,
-L<Attribute::Handlers>, L<mro>, L<MRO::Define>.
+L<attributes>, L<perlsub>, L<perlmod>, L<Attribute::Handlers>, L<mro>,
+L<MRO::Define>.
 
 =head1 COPYRIGHT AND LICENSE
 
