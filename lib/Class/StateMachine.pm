@@ -310,7 +310,7 @@ parameter to C<Class::StateMachine::bless> is ommited.
 
 =head2 Instance state
 
-The instance state is maintained by Class::StateMachine and can be
+The instance state is maintained internally by Class::StateMachine and can be
 accessed though the L</state> method:
 
   my $state = Dog->state;
@@ -324,7 +324,7 @@ Class::StateMachine will not change the state of your objects in any
 other way.
 
 If you want to limit the possible set of states that the objects of
-some class can take, define a L<state_check> method for that class:
+some class can take, define a L</state_check> method for that class:
 
   package Dog;
   ...
@@ -507,6 +507,8 @@ may not work as expected.
 
 L<attributes>, L<perlsub>, L<perlmod>, L<Attribute::Handlers>, L<mro>,
 L<MRO::Define>.
+
+The C<dog.pl> example included within the package.
 
 =head1 COPYRIGHT AND LICENSE
 
