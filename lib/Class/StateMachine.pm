@@ -93,10 +93,16 @@ my @state_methods;
 
 sub _handle_attr_OnState {
     my ($class, $sub, $on_state) = @_;
+    my ($filename, $line) = (caller 2)[1,2];
     my ($err, @on_state);
     do {
         local $@;
-        @on_state = _eval_states "package $class; $on_state";
+        @on_state = _eval_states <<EOE;
+package $class;
+no warnings 'reserved';
+# line $line $filename
+$on_state;
+EOE
         $err = $@;
     };
     croak $err if $err;
