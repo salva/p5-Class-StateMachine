@@ -35,7 +35,7 @@ sub leave_state : OnState(__any__) {
 }
 
 sub new {
-    my $class=shift;
+    my $class = shift;
     Class::StateMachine::bless {@_}, $class;
 }
 

@@ -1,7 +1,24 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.13  Jul 11, 2011
+      - lots of improvements, some of them breaking backwards
+        compatibility
+      - use mro for better and saner method dispatching
+      - move methods to __methods__ namespaces on demand
+      - no CHECK blocks
+      - require using Class::StateMachine::bless for object
+        construction
+      - much better docs
+      - check_state callback
+      - enter_state and leave_state callback
+      - rebless renamed to bless
+      - use FieldHash to store object state
+      - use Sub::Name to rename subs into final namespace (ensuring
+        next::method works as expected)
+      - others...
+
 0.12  Apr 18, 2006
-    - minor corrections to the docs
+      - minor corrections to the docs
 
 0.11  Thu Jun 23
 	- first version released on CPAN
