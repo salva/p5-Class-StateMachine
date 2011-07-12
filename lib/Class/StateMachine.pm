@@ -1,6 +1,8 @@
 package Class::StateMachine;
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
+
+our $debug //= 0;
 
 package Class::StateMachine::Private;
 
@@ -22,10 +24,20 @@ use Hash::Util qw(fieldhash);
 use Devel::Peek 'CvGV';
 use Package::Stash;
 use Sub::Name;
+use Scalar::Util qw(refaddr);
 
 fieldhash my %state;
 my ( %class_isa_stateful,
      %class_bootstrapped );
+
+sub _debug {
+    my $self = shift;
+    my $class = Class::StateMachine::ref($self);
+    my $state = $state{$self} // '<undef>';
+    my $addr = refaddr($self);
+    warn "${class}[$addr/$state]> @_\n";
+}
+
 
 sub _state {
     my($self, $new_state) = @_;
@@ -33,23 +45,30 @@ sub _state {
     if (defined $new_state) {
         my $old_state = $state{$self};
         return $old_state if $new_state eq $old_state;
+        $debug and _debug($self, "changing state from $old_state to $new_state");
         my $check = $self->can('check_state');
         if ($check) {
+            $debug and _debug($self, "checking state $new_state");
             $check->($self, $new_state) or croak qq(invalid state "$new_state");
         }
         my $leave = $self->can('leave_state');
         if ($leave) {
+            $debug and _debug($self, "calling leave_state($old_state, $new_state)");
             $leave->($self, $old_state, $new_state);
-            return $state{$self} if $state{$self} ne $old_state;
+            if ($state{$self} ne $old_state) {
+                $debug and _debug($self, "state transition from $old_state to $new_state shortcuted to $state{$self}");
+                return $state{$self}
+            }
         }
         my $base_class = ref($self);
         $base_class =~ s|::__state__::.*$||;
         my $class = _bootstrap_state_class($base_class, $new_state);
-        # warn "blessing $self into $class";
         bless $self, $class;
+        $debug and _debug($self, "real class set to $class");
         $state{$self} = $new_state;
         my $enter = $self->can('enter_state');
         if ($enter) {
+            $debug and _debug($self, "calling enter_state($new_state, $old_state)");
             $enter->($self, $new_state, $old_state);
         }
     }
@@ -68,6 +87,8 @@ sub _bless {
     }
     my $class = _bootstrap_state_class($base_class, $state{$self});
     bless $self, $class;
+    $debug and _debug($self, "real class set to $class");
+    $self;
 }
 
 sub _bootstrap_state_class {
@@ -479,6 +500,14 @@ Returns the class of the object without the parts related to
 Class::StateMachine magic.
 
 =back
+
+=head2 Debugging
+
+Class::StateMachine supports a debugging mode that prints traces of
+state changes and callback invocation. It can be enables as follows:
+
+  $Class::StateMachine::debug = 1;
+
 
 =head2 Internals
 

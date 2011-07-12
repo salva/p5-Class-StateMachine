@@ -1,5 +1,8 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.15  Jul 15, 2011
+      - add support for debugging mode
+
 0.14  Jul 12, 2011
       - add missing dependency Sub::Name
 
