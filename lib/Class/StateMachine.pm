@@ -504,7 +504,7 @@ Class::StateMachine magic.
 =head2 Debugging
 
 Class::StateMachine supports a debugging mode that prints traces of
-state changes and callback invocation. It can be enables as follows:
+state changes and callback invocation. It can be enabled as follows:
 
   $Class::StateMachine::debug = 1;
 
