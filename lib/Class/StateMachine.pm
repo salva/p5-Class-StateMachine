@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 our $debug //= 0;
 
@@ -236,7 +236,15 @@ sub AUTOLOAD {
     else {
         Carp::croak "Undefined subroutine &$AUTOLOAD called"
     }
- }
+}
+
+sub install_method {
+    my ($class, $sub, @states) = @_;
+    CORE::ref $class and Carp::croak "$class is not a package valid package name";
+    CODE::ref $sub eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
+    push @state_methods, [$class, $sub, @states];
+    Class::StateMachine::Private::_move_state_methods;
+}
 
 1;
 __END__
@@ -498,6 +506,10 @@ the new value.
 
 Returns the class of the object without the parts related to
 Class::StateMachine magic.
+
+=item Class::StateMachine::install_method($class, $sub, @states)
+
+Sets a submethod for a given class/state combination.
 
 =back
 
