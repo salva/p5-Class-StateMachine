@@ -1,5 +1,8 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.17  Jul 14
+      - solve bug on install_method
+
 0.16  Jul 14
       - add support for install_method
 

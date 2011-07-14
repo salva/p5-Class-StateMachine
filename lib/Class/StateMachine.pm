@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 
 our $debug //= 0;
 
@@ -130,13 +130,13 @@ EOE
     grep(!defined, @on_state) and croak "undef is not a valid state";
     @on_state or warnings::warnif('Class::StateMachine',
                                   'no states on OnState attribute declaration');
-    push @state_methods, [$class, $sub, @on_state];
+    push @state_methods, [$class, undef, $sub, @on_state];
 }
 
 sub _move_state_methods {
     while (@state_methods) {
-	my ($class, $sub, @on_state) = @{shift @state_methods};
-	my $sym = CvGV($sub);
+	my ($class, $sym, $sub, @on_state) = @{shift @state_methods};
+	$sym //= CvGV($sub);
 	my ($method) = $sym=~/::([^:]+)$/ or croak "invalid symbol name '$sym'";
 
         my $stash = Package::Stash->new($class);
@@ -239,10 +239,10 @@ sub AUTOLOAD {
 }
 
 sub install_method {
-    my ($class, $sub, @states) = @_;
+    my ($class, $name, $sub, @states) = @_;
     CORE::ref $class and Carp::croak "$class is not a package valid package name";
     CODE::ref $sub eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
-    push @state_methods, [$class, $sub, @states];
+    push @state_methods, [$class, $name, $sub, @states];
     Class::StateMachine::Private::_move_state_methods;
 }
 
