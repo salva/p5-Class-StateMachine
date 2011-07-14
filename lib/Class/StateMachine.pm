@@ -291,17 +291,16 @@ Class::StateMachine - define classes for state machines
 =head1 DESCRIPTION
 
 This module allows to build classes whose instance behavior (methods)
-depends not only on inheritance but also on some internal instance
-state.
+depends not only on inheritance but also on some internal state.
 
-For instance, suppose we want to develop a Dog class implementing the
+For example, suppose we want to develop a Dog class implementing the
 following behavior:
 
   my $dog = Dog->new;
   $dog->state("happy");
-  $dog->on_touched_head; # the dog will move his tail
+  $dog->on_touched_head; # the dog moves his tail
   $dog->state("angry");
-  $dog->on_touched_head; # the dog will bite you
+  $dog->on_touched_head; # the dog bites you
 
 With the help of Class::StateMachine, that state dependant behaviour
 can be easily programmed using the C<OnState> subroutine attribute as
@@ -320,9 +319,9 @@ Class::StateMachine does not imposse any particular type of data
 structure for the instance objects. Any Perl reference type (HASH,
 ARRAY, SCALAR, GLOB, etc.) can be used.
 
-The unique condition is that must be fulfilled is to use the C<bless>
-subrutine provided by Class::StateMachine instead of the Perl builtin
-of the same name.
+The unique condition that must be fulfilled is to use the C<bless>
+subroutine provided by Class::StateMachine to create the object instead
+of the Perl builtin of the same name.
 
 For instance:
 
@@ -334,13 +333,13 @@ For instance:
     Class::StateMachine::bless($dog, $class, 'happy');
   }
 
-A default state C<new> gets assigned to the object if the third
+A default state C<new> gets assigned to the object when the third
 parameter to C<Class::StateMachine::bless> is ommited.
 
 =head2 Instance state
 
-The instance state is maintained internally by Class::StateMachine and can be
-accessed though the L</state> method:
+The instance state is maintained internally by Class::StateMachine and
+can be accessed though the L</state> method:
 
   my $state = Dog->state;
 
