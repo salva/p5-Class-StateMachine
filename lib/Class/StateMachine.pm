@@ -506,7 +506,7 @@ the new value.
 Returns the class of the object without the parts related to
 Class::StateMachine magic.
 
-=item Class::StateMachine::install_method($class, $sub, @states)
+=item Class::StateMachine::install_method($class, $method_name, $sub, @states)
 
 Sets a submethod for a given class/state combination.
 
