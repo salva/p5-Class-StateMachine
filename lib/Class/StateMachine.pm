@@ -17,7 +17,7 @@ sub _eval_states {
 use strict;
 use warnings;
 use Carp;
-
+BEGIN { our @CARP_NOT = qw(Class::StateMachine) }
 use mro;
 use MRO::Define;
 use Hash::Util qw(fieldhash);
@@ -137,7 +137,7 @@ sub _move_state_methods {
     while (@state_methods) {
 	my ($class, $sym, $sub, @on_state) = @{shift @state_methods};
 	$sym //= CvGV($sub);
-	my ($method) = $sym=~/::([^:]+)$/ or croak "invalid symbol name '$sym'";
+	my ($method) = $sym=~/([^:]+)$/ or croak "invalid symbol name '$sym'";
 
         my $stash = Package::Stash->new($class);
         $stash->remove_symbol("&$method");
@@ -240,8 +240,8 @@ sub AUTOLOAD {
 
 sub install_method {
     my ($class, $name, $sub, @states) = @_;
-    CORE::ref $class and Carp::croak "$class is not a package valid package name";
-    CODE::ref $sub eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
+    CORE::ref($class) and Carp::croak "$class is not a package valid package name";
+    CORE::ref($sub) eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
     push @state_methods, [$class, $name, $sub, @states];
     Class::StateMachine::Private::_move_state_methods;
 }
