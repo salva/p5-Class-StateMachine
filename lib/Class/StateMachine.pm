@@ -231,6 +231,7 @@ sub AUTOLOAD {
                          "The submethods on the inheritance chain are:",
                          "    " . join("\n    ", @submethods),
                          "...");
+        local $Carp::Verbose = 1;
         Carp::croak $error;
     }
     else {
