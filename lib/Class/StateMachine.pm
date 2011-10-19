@@ -110,8 +110,6 @@ sub _delay {
         $code = (caller 1)[3];
         $code =~ s/.*:://;
     }
-    my ($self, $code) = @_;
-    defined $code or return;
     my $delayed = ($delayed{$self} //= []);
     push @$delayed, $code;
 }
