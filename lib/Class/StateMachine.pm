@@ -208,7 +208,7 @@ sub MODIFY_CODE_ATTRIBUTES {
 *state = \&Class::StateMachine::Private::_state;
 *rebless = \&Class::StateMachine::Private::_bless;
 *bless = \&Class::StateMachine::Private::_bless;
-*delay_until_next_state = \&Class::StateMachine::Private::delay;
+*delay_until_next_state = \&Class::StateMachine::Private::_delay;
 
 sub ref {
     my $class = ref $_[0];
