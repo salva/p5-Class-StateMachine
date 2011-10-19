@@ -366,12 +366,12 @@ parameter to C<Class::StateMachine::bless> is ommited.
 The instance state is maintained internally by Class::StateMachine and
 can be accessed though the L</state> method:
 
-  my $state = Dog->state;
+  my $state = $dog->state;
 
 State changes must be performed explicitly calling the C<state> method
 with the new state as an argument:
 
-  Dog->state('tired');
+  $dog->state('tired');
 
 Class::StateMachine will not change the state of your objects in any
 other way.
@@ -386,7 +386,7 @@ some class can take, define a L</state_check> method for that class:
     $state =~ /^(?:happy|angry|tired)$/
   }
 
-That will make die any call to C<state> requesting a change to an
+That will cause to die any call to C<state> requesting a change to an
 invalid state.
 
 New objects get assigned the state 'new' when they are created.
