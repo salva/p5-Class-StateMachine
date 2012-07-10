@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.18';
+our $VERSION = '0.19';
 
 our $debug //= 0;
 
@@ -28,6 +28,7 @@ use Scalar::Util qw(refaddr);
 
 fieldhash my %state;
 fieldhash my %delayed;
+fieldhash my %delayed_ready;
 
 my ( %class_isa_stateful,
      %class_bootstrapped );
@@ -68,18 +69,40 @@ sub _state {
         bless $self, $class;
         $debug and _debug($self, "real class set to $class");
         $state{$self} = $new_state;
+
+        # Anything that enters the delayed array after this point
+        # should not be called until a new state change happens. We
+        # move the delayed actions to the %delayed_ready hash and call
+        # them after the enter_state method. The aim behind using the
+        # global %delayed_ready is that a state change can be induced
+        # by enter_state or from any of the delayed actions and
+        # delayed action processing restarted from there (that is
+        # here, actually!).
+
+        my $delayed = $delayed{$self};
+        my $dr;
+        if ($delayed and @$delayed) {
+            $dr = $delayed_ready{$self} ||= [];
+            push @$dr, @$delayed;
+            $#$delayed = -1;
+        }
+
         my $enter = $self->can('enter_state');
         if ($enter) {
             $debug and _debug($self, "calling enter_state($new_state, $old_state)");
             $enter->($self, $new_state, $old_state);
+            $debug and _debug($self, "back from enter_state($new_state, $old_state)");
         }
-        if (my $delayed = $delayed{$self}) {
-            while (@$delayed) {
-                my $action = shift @$delayed;
+
+        if ($dr) {
+            while (@$dr) {
+                my $action = shift @$dr;
+                $debug and _debug($self, "running delayed action $action");
                 $self->$action
             }
         }
     }
+    $debug and _debug($self, "state set to $state{$self}");
     $state{$self};
 }
 
@@ -592,7 +615,7 @@ The C<dog.pl> example included within the package.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003-2006, 2011 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (C) 2003-2006, 2011, 2012 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
