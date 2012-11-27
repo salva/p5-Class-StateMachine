@@ -180,9 +180,7 @@ EOE
 }
 
 sub _move_state_methods {
-
-    $_[1] //= CvGV($_[2] for @state_methods
-
+    $_->[1] //= CvGV $_->[2] for @state_methods;
     while (@state_methods) {
 	my ($class, $sym, $sub, @on_state) = @{shift @state_methods};
 	my ($method) = $sym=~/([^:]+)$/ or croak "invalid symbol name '$sym'";
