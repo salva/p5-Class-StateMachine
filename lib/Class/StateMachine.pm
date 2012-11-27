@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 our $debug //= 0;
 

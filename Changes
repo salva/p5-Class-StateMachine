@@ -1,5 +1,8 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.20  Nov 27, 2012
+      - work around bug on the pure-perl version of Package::Stash
+
 0.19  Jul 10, 2012
       - delayed action processing was broken and could loop forever
         when delayed actions were created from previous delayed action
