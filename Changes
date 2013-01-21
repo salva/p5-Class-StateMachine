@@ -1,5 +1,8 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.20  Jan 21, 2013
+      - add support for delay_once_until_next_state method
+
 0.19  Jul 10, 2012
       - delayed action processing was broken and could loop forever
         when delayed actions were created from previous delayed action

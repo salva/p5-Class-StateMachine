@@ -2,7 +2,7 @@
 
 use 5.010;
 
-use Test::More tests => 12;
+use Test::More tests => 15;
 BEGIN { use_ok('Class::StateMachine') };
 
 package SM;
@@ -28,6 +28,12 @@ sub fuz : OnState(two) {
     shift->delay_until_next_state
 }
 sub fuz : OnState(__any__) { $fuz = 2 }
+
+sub muz : OnState(two) {
+    shift->delay_once_until_next_state;
+}
+
+sub muz : OnState(__any__) { $fuz++ }
 
 sub enter_state {
     say "enter to: $_[1] from: $_[2]";
@@ -73,6 +79,15 @@ is($fuz, 1);
 $t->state('three');
 is($fuz, 2);
 is($t->foo, 3, 'three');
+
+$t->state('two');
+is($fuz, 2);
+$t->muz;
+$t->muz;
+is($fuz, 2);
+
+$t->state('three');
+is($fuz, 3);
 
 $t->state('sdfkjl');
 is($t->bar, 'any', 'any');

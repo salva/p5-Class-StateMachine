@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.19';
+our $VERSION = '0.20';
 
 our $debug //= 0;
 
@@ -29,6 +29,7 @@ use Scalar::Util qw(refaddr);
 fieldhash my %state;
 fieldhash my %delayed;
 fieldhash my %delayed_ready;
+fieldhash my %delayed_once;
 
 my ( %class_isa_stateful,
      %class_bootstrapped );
@@ -82,6 +83,7 @@ sub _state {
         my $delayed = $delayed{$self};
         my $dr;
         if ($delayed and @$delayed) {
+            delete $delayed_once{$self};
             $dr = $delayed_ready{$self} ||= [];
             push @$dr, @$delayed;
             $#$delayed = -1;
@@ -127,6 +129,7 @@ sub _delay {
     my $code;
     if (@_) {
         $code = shift;
+        @_ and croak 'Usage: $self->delay_until_next_state($method_or_cb)';
         defined $code or return;
     }
     else {
@@ -135,6 +138,23 @@ sub _delay {
     }
     my $delayed = ($delayed{$self} //= []);
     push @$delayed, $code;
+}
+
+sub _delay_once {
+    my $self = shift;
+    my $method;
+    if (@_) {
+        $method = shift;
+        @_ and croak 'Usage: $self->delay_once_until_next_state($method)';
+        defined $method or return;
+        croak "_delay_once does not accept code refs" if ref $method;
+    }
+    else {
+        $method = (caller 1)[3];
+        $method =~ s/.*:://;
+    }
+    $delayed_once{$self}{$method}++
+        or _delay($self, $method);
 }
 
 sub _bootstrap_state_class {
@@ -232,6 +252,7 @@ sub MODIFY_CODE_ATTRIBUTES {
 *rebless = \&Class::StateMachine::Private::_bless;
 *bless = \&Class::StateMachine::Private::_bless;
 *delay_until_next_state = \&Class::StateMachine::Private::_delay;
+*delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
 
 sub ref {
     my $class = ref $_[0];
@@ -560,6 +581,26 @@ known how to handle in its current state. For instance:
 
   sub on_foo :OnState('bar') { shift->delay_until_next_state }
 
+=item $self->delay_once_until_next_state
+
+=item $self->delay_once_until_next_state($method_name)
+
+This method is similar to C<delay_until_next_state> but further
+requests to delay the same method will be discarded until the object
+state changes. For instance:
+
+  sub foo OnState(one) { shift->delay_once_until_next_state }
+  sub foo OnState(two) { print "hello world\n" }
+
+  my $obj = $class->new();
+  $obj->state('one');
+  $obj->foo; # recorded
+  $obj->foo; # ignored!
+
+  $obj->state('two'); # foo is called once here.
+
+Note that this method does not accept a code reference as argument.
+
 =back
 
 =item Class::StateMachine::ref($obj)
@@ -615,7 +656,7 @@ The C<dog.pl> example included within the package.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003-2006, 2011, 2012 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (C) 2003-2006, 2011-2013 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
