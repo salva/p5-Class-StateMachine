@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.20';
+our $VERSION = '0.21';
 
 our $debug //= 0;
 
@@ -200,9 +200,9 @@ EOE
 }
 
 sub _move_state_methods {
+    $_->[1] //= CvGV $_->[2] for @state_methods;
     while (@state_methods) {
 	my ($class, $sym, $sub, @on_state) = @{shift @state_methods};
-	$sym //= CvGV($sub);
 	my ($method) = $sym=~/([^:]+)$/ or croak "invalid symbol name '$sym'";
 
         my $stash = Package::Stash->new($class);
