@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.17';
+our $VERSION = '0.21';
 
 our $debug //= 0;
 
@@ -17,7 +17,7 @@ sub _eval_states {
 use strict;
 use warnings;
 use Carp;
-
+BEGIN { our @CARP_NOT = qw(Class::StateMachine) }
 use mro;
 use MRO::Define;
 use Hash::Util qw(fieldhash);
@@ -27,6 +27,10 @@ use Sub::Name;
 use Scalar::Util qw(refaddr);
 
 fieldhash my %state;
+fieldhash my %delayed;
+fieldhash my %delayed_ready;
+fieldhash my %delayed_once;
+
 my ( %class_isa_stateful,
      %class_bootstrapped );
 
@@ -66,12 +70,41 @@ sub _state {
         bless $self, $class;
         $debug and _debug($self, "real class set to $class");
         $state{$self} = $new_state;
+
+        # Anything that enters the delayed array after this point
+        # should not be called until a new state change happens. We
+        # move the delayed actions to the %delayed_ready hash and call
+        # them after the enter_state method. The aim behind using the
+        # global %delayed_ready is that a state change can be induced
+        # by enter_state or from any of the delayed actions and
+        # delayed action processing restarted from there (that is
+        # here, actually!).
+
+        my $delayed = $delayed{$self};
+        my $dr;
+        if ($delayed and @$delayed) {
+            delete $delayed_once{$self};
+            $dr = $delayed_ready{$self} ||= [];
+            push @$dr, @$delayed;
+            $#$delayed = -1;
+        }
+
         my $enter = $self->can('enter_state');
         if ($enter) {
             $debug and _debug($self, "calling enter_state($new_state, $old_state)");
             $enter->($self, $new_state, $old_state);
+            $debug and _debug($self, "back from enter_state($new_state, $old_state)");
+        }
+
+        if ($dr) {
+            while (@$dr) {
+                my $action = shift @$dr;
+                $debug and _debug($self, "running delayed action $action");
+                $self->$action
+            }
         }
     }
+    $debug and _debug($self, "state set to $state{$self}");
     $state{$self};
 }
 
@@ -89,6 +122,39 @@ sub _bless {
     bless $self, $class;
     $debug and _debug($self, "real class set to $class");
     $self;
+}
+
+sub _delay {
+    my $self = shift;
+    my $code;
+    if (@_) {
+        $code = shift;
+        @_ and croak 'Usage: $self->delay_until_next_state($method_or_cb)';
+        defined $code or return;
+    }
+    else {
+        $code = (caller 1)[3];
+        $code =~ s/.*:://;
+    }
+    my $delayed = ($delayed{$self} //= []);
+    push @$delayed, $code;
+}
+
+sub _delay_once {
+    my $self = shift;
+    my $method;
+    if (@_) {
+        $method = shift;
+        @_ and croak 'Usage: $self->delay_once_until_next_state($method)';
+        defined $method or return;
+        croak "_delay_once does not accept code refs" if ref $method;
+    }
+    else {
+        $method = (caller 1)[3];
+        $method =~ s/.*:://;
+    }
+    $delayed_once{$self}{$method}++
+        or _delay($self, $method);
 }
 
 sub _bootstrap_state_class {
@@ -134,10 +200,10 @@ EOE
 }
 
 sub _move_state_methods {
+    $_->[1] //= CvGV $_->[2] for @state_methods;
     while (@state_methods) {
 	my ($class, $sym, $sub, @on_state) = @{shift @state_methods};
-	$sym //= CvGV($sub);
-	my ($method) = $sym=~/::([^:]+)$/ or croak "invalid symbol name '$sym'";
+	my ($method) = $sym=~/([^:]+)$/ or croak "invalid symbol name '$sym'";
 
         my $stash = Package::Stash->new($class);
         $stash->remove_symbol("&$method");
@@ -185,6 +251,8 @@ sub MODIFY_CODE_ATTRIBUTES {
 *state = \&Class::StateMachine::Private::_state;
 *rebless = \&Class::StateMachine::Private::_bless;
 *bless = \&Class::StateMachine::Private::_bless;
+*delay_until_next_state = \&Class::StateMachine::Private::_delay;
+*delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
 
 sub ref {
     my $class = ref $_[0];
@@ -231,6 +299,7 @@ sub AUTOLOAD {
                          "The submethods on the inheritance chain are:",
                          "    " . join("\n    ", @submethods),
                          "...");
+        local $Carp::Verbose = 1;
         Carp::croak $error;
     }
     else {
@@ -240,8 +309,8 @@ sub AUTOLOAD {
 
 sub install_method {
     my ($class, $name, $sub, @states) = @_;
-    CORE::ref $class and Carp::croak "$class is not a package valid package name";
-    CODE::ref $sub eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
+    CORE::ref($class) and Carp::croak "$class is not a package valid package name";
+    CORE::ref($sub) eq 'CODE' or Carp::croak "$sub is not a subroutine reference";
     push @state_methods, [$class, $name, $sub, @states];
     Class::StateMachine::Private::_move_state_methods;
 }
@@ -341,12 +410,12 @@ parameter to C<Class::StateMachine::bless> is ommited.
 The instance state is maintained internally by Class::StateMachine and
 can be accessed though the L</state> method:
 
-  my $state = Dog->state;
+  my $state = $dog->state;
 
 State changes must be performed explicitly calling the C<state> method
 with the new state as an argument:
 
-  Dog->state('tired');
+  $dog->state('tired');
 
 Class::StateMachine will not change the state of your objects in any
 other way.
@@ -361,7 +430,7 @@ some class can take, define a L</state_check> method for that class:
     $state =~ /^(?:happy|angry|tired)$/
   }
 
-That will make die any call to C<state> requesting a change to an
+That will cause to die any call to C<state> requesting a change to an
 invalid state.
 
 New objects get assigned the state 'new' when they are created.
@@ -497,6 +566,41 @@ $old_state, the requested state change is canceled.
 X<enter_state>This method is called just after changing the state to
 the new value.
 
+=item $self->delay_until_next_state
+
+=item $self->delay_until_next_state($method_name)
+
+=item $self->delay_until_next_state($code_ref)
+
+This function allows to save a code reference or a method name that
+will be called after the next state transition from the C<state>
+method just after C<enter_state>.
+
+It is useful when your object receives some message that does not
+known how to handle in its current state. For instance:
+
+  sub on_foo :OnState('bar') { shift->delay_until_next_state }
+
+=item $self->delay_once_until_next_state
+
+=item $self->delay_once_until_next_state($method_name)
+
+This method is similar to C<delay_until_next_state> but further
+requests to delay the same method will be discarded until the object
+state changes. For instance:
+
+  sub foo OnState(one) { shift->delay_once_until_next_state }
+  sub foo OnState(two) { print "hello world\n" }
+
+  my $obj = $class->new();
+  $obj->state('one');
+  $obj->foo; # recorded
+  $obj->foo; # ignored!
+
+  $obj->state('two'); # foo is called once here.
+
+Note that this method does not accept a code reference as argument.
+
 =back
 
 =item Class::StateMachine::ref($obj)
@@ -552,7 +656,7 @@ The C<dog.pl> example included within the package.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003-2006, 2011 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (C) 2003-2006, 2011-2013 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
