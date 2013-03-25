@@ -2,7 +2,8 @@ package Class::StateMachine;
 
 our $VERSION = '0.21';
 
-our $debug //= 0;
+our $debug                     //= 0;
+our $ignore_same_state_changes //= 0;
 
 package Class::StateMachine::Private;
 
@@ -27,12 +28,11 @@ use Sub::Name;
 use Scalar::Util qw(refaddr);
 
 fieldhash my %state;
+fieldhash my %state_changed;
 fieldhash my %delayed;
-fieldhash my %delayed_ready;
 fieldhash my %delayed_once;
 
-my ( %class_isa_stateful,
-     %class_bootstrapped );
+my %class_bootstrapped;
 
 sub _debug {
     my $self = shift;
@@ -42,70 +42,55 @@ sub _debug {
     warn "${class}[$addr/$state]> @_\n";
 }
 
-
 sub _state {
     my($self, $new_state) = @_;
-    $state{$self} // croak("object $self has no state, are you using Class::StateMachine::bless?");
+    $state{$self} // croak("object $self has no state, " .
+                           "use Class::StateMachine::bless to create Class::StateMachine objects");
     if (defined $new_state) {
         my $old_state = $state{$self};
-        return $old_state if $new_state eq $old_state;
+        return $old_state if $ignore_same_state_changes and $new_state eq $old_state;
         $debug and _debug($self, "changing state from $old_state to $new_state");
-        my $check = $self->can('check_state');
-        if ($check) {
+        $state_changed{$self} = 1;
+        local $state_changed{$self};
+
+        if (my $check = $self->can('check_state')) {
             $debug and _debug($self, "checking state $new_state");
             $check->($self, $new_state) or croak qq(invalid state "$new_state");
+            return $state{$self} if $state_changed{$self};
         }
-        my $leave = $self->can('leave_state');
-        if ($leave) {
+        if (my $leave = $self->can('leave_state')) {
             $debug and _debug($self, "calling leave_state($old_state, $new_state)");
             $leave->($self, $old_state, $new_state);
-            if ($state{$self} ne $old_state) {
-                $debug and _debug($self, "state transition from $old_state to $new_state shortcuted to $state{$self}");
-                return $state{$self}
-            }
+            return $state{$self} if $state_changed{$self};
         }
+
         my $base_class = ref($self);
         $base_class =~ s|::__state__::.*$||;
         my $class = _bootstrap_state_class($base_class, $new_state);
+        $state{$self} = $new_state;
         bless $self, $class;
         $debug and _debug($self, "real class set to $class");
-        $state{$self} = $new_state;
-
-        # Anything that enters the delayed array after this point
-        # should not be called until a new state change happens. We
-        # move the delayed actions to the %delayed_ready hash and call
-        # them after the enter_state method. The aim behind using the
-        # global %delayed_ready is that a state change can be induced
-        # by enter_state or from any of the delayed actions and
-        # delayed action processing restarted from there (that is
-        # here, actually!).
 
         my $delayed = $delayed{$self};
-        my $dr;
-        if ($delayed and @$delayed) {
-            delete $delayed_once{$self};
-            $dr = $delayed_ready{$self} ||= [];
-            push @$dr, @$delayed;
-            $#$delayed = -1;
-        }
+        my $delayed_top = ($delayed ? $#$delayed : -1);
 
-        my $enter = $self->can('enter_state');
-        if ($enter) {
+        if (my $enter = $self->can('enter_state')) {
             $debug and _debug($self, "calling enter_state($new_state, $old_state)");
             $enter->($self, $new_state, $old_state);
             $debug and _debug($self, "back from enter_state($new_state, $old_state)");
+            return $state{$self} if $state_changed{$self};
         }
 
-        if ($dr) {
-            while (@$dr) {
-                my $action = shift @$dr;
-                $debug and _debug($self, "running delayed action $action");
-                $self->$action
-            }
+        for (0..$delayed_top) {
+            my $action = shift @$delayed;
+            $debug and _debug($self, "running delayed action $action");
+            $self->$action;
+            return $state{$self} if $state_changed{$self};
         }
     }
+
     $debug and _debug($self, "state set to $state{$self}");
-    $state{$self};
+    return $state{$self};
 }
 
 sub _bless {
@@ -167,7 +152,6 @@ sub _bootstrap_state_class {
 
 	no strict 'refs';
         @{$state_class.'::ISA'} = $class;
-        # @{$state_class.'::ISA'} = (@on_state, $class);
         ${$state_class.'::state'} = $state;
         ${$state_class.'::base_class'} = $class;
         ${$state_class.'::state_class'} = $state_class;
@@ -541,8 +525,12 @@ This method calls back the methods C<check_state>, C<leave_state> and
 C<enter_state> if they are defined in the class or any of its
 subclasses for the corresponding state.
 
-If C<$new_state> equals the current object state, this method does
-nothing (including not invoking the callback methods).
+Until version 0.21, when C<$new_state> was equal to the current object
+state, this method would not invoke callback methods (C<enter_state>,
+C<leave_state>, etc.). On version 0.22 this special casing was
+removed.
+
+The variable 
 
 =over 4
 

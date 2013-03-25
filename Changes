@@ -1,5 +1,12 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.22
+      - improve detection of state changes from callbacks
+        (i.e. enter_state, leave_state, delayed events, etc.)
+      *** incompatible change ***
+      - calling state with the same state as the current one now
+        triggers callbacks
+
 0.21  Jan 21, 2013
       - add support for delay_once_until_next_state method
 
