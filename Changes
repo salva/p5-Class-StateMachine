@@ -1,6 +1,7 @@
 Revision history for Perl extension Class::StateMachine.
 
-0.22
+0.22  Mar 25, 2013
+      - add support for the set_state_isa and state_isa methods
       - improve detection of state changes from callbacks
         (i.e. enter_state, leave_state, delayed events, etc.)
       *** incompatible change ***

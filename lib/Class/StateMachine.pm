@@ -1,6 +1,6 @@
 package Class::StateMachine;
 
-our $VERSION = '0.21';
+our $VERSION = '0.22';
 
 our $debug                     //= 0;
 our $ignore_same_state_changes //= 0;
@@ -33,6 +33,7 @@ fieldhash my %delayed;
 fieldhash my %delayed_once;
 
 my %class_bootstrapped;
+my %class_state_isa;
 
 sub _debug {
     my $self = shift;
@@ -202,23 +203,61 @@ sub _move_state_methods {
     }
 }
 
+sub _set_state_isa {
+    my ($class, $state, @isa) = @_;
+    %class_bootstrapped = ();
+    mro::method_changed_in($class) if mro::get_pkg_gen($class);
+    $class_state_isa{$class}{$state} = \@isa;
+}
+
+sub _state_isa {
+    my ($class, $state) = @_;
+    if (my $ref = ref $class) {
+        $state //= $class->state;
+        no strict 'refs';
+        $class = ${$ref . "::base_class"};
+    }
+    _state_isa_from_derived([grep { $_->isa('Class::StateMachine') } @{mro::get_linear_isa($class)}],
+                            $state);
+}
+
+
+sub _state_isa_from_derived {
+    my ($derived, $state) = @_;
+    my (@isa, @queue, %seen);
+    do {
+        unless ($seen{$state}++) {
+            push @isa, $state;
+            for my $class (@$derived) {
+                if (my $isa = $class_state_isa{$class}{$state}) {
+                    push @queue, @$isa;
+                    last;
+                }
+            }
+        }
+    } while (defined($state = shift @queue));
+    push @isa, '__any__';
+    wantarray ? @isa : $isa[1];
+}
+
 # use Data::Dumper;
 sub _statemachine_mro {
     my $stash = shift;
     # print Dumper $stash;
     _move_state_methods if @state_methods;
-    my $state_class = ${$stash->{state_class}};
     my $base_class = ${$stash->{base_class}};
     my $state = ${$stash->{state}};
     my @linear = @{mro::get_linear_isa($base_class)};
     my @derived = grep { $_->isa('Class::StateMachine') } @linear;
-    my @state = ($state_class,
-                 ( grep mro::get_pkg_gen($_),
-                   map(join('::', $_, '__methods__', $state   ), @derived),
-                   map(join('::', $_, '__methods__', '__any__'), @derived) ),
-                 @linear);
-    # print "mro $base_class/$state [@linear] => [@state]\n";
-    \@state;
+    my @classes;
+    for my $state (_state_isa_from_derived(\@derived, $state)) {
+        push @classes, map join('::', $_, '__methods__', $state), @derived;
+    }
+
+    # workaround bug on early mro implementations where the first
+    # class on the list returned was always discarded:
+    my $state_class = pop @classes;
+    [ $state_class, grep mro::get_pkg_gen($_), @classes, @linear ]
 }
 
 MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
@@ -237,6 +276,8 @@ sub MODIFY_CODE_ATTRIBUTES {
 *bless = \&Class::StateMachine::Private::_bless;
 *delay_until_next_state = \&Class::StateMachine::Private::_delay;
 *delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
+*set_state_isa = \&Class::StateMachine::Private::_set_state_isa;
+*state_isa = \&Class::StateMachine::Private::_state_isa;
 
 sub ref {
     my $class = ref $_[0];
@@ -603,6 +644,18 @@ Class::StateMachine magic.
 Sets a submethod for a given class/state combination.
 
 =back
+
+=item Class::StateMachine::set_state_isa($class, $state, @isa)
+
+Allows to set one state as derived from others.
+
+Note that support for state derivation is completly experimental and
+may change at any time!
+
+=item Class::StateMachine::state_isa($class, $state)
+
+Returns the list of states from which the given C<$state> derives
+including itself and C<__any__>.
 
 =head2 Debugging
 

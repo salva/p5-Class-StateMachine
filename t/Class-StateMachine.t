@@ -2,7 +2,7 @@
 
 use 5.010;
 
-use Test::More tests => 15;
+use Test::More tests => 17;
 BEGIN { use_ok('Class::StateMachine') };
 
 package SM;
@@ -11,6 +11,7 @@ use warnings;
 no warnings 'redefine';
 
 use parent 'Class::StateMachine';
+__PACKAGE__->set_state_isa(eigth => 'seven');
 
 sub foo : OnState(one) { 1 }
 
@@ -97,4 +98,8 @@ ok (!eval { $t->foo; 1 }, 'die on no state-method defined');
 $t->state('six');
 is($t->bar, 7, 'multi six');
 
+$t->state('eigth');
+is($t->bar, 7, 'state deriving');
 
+my @state_isa = $t->state_isa;
+is_deeply(\@state_isa, [qw(eigth seven __any__)], 'state_isa');
