@@ -270,7 +270,7 @@ Class::StateMachine - define classes for state machines
   sub new {
       my $class = shift;
       my $self = {};
-      Class::StateMachine::bless $self, $class;
+      Class::StateMachine::bless $self, $class, 'one';
       $self;
   }
 
