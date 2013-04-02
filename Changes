@@ -1,5 +1,10 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.23
+      - some internal lexical variables from Class::StateMachine were
+        leaking into the environment used to evaluate state names from
+        OnState declarations
+
 0.22  Mar 25, 2013
       - add support for the set_state_isa and state_isa methods
       - improve detection of state changes from callbacks
