@@ -1,5 +1,15 @@
 package Class::StateMachine;
 
+package Class::StateMachine::Private;
+
+sub _eval_states {
+    # we want the state declarations evaluated inside a clean
+    # environment (lexical free):
+    eval $_[0]
+}
+
+package Class::StateMachine;
+
 our $VERSION = '0.22';
 
 our $debug                     //= 0;
@@ -8,12 +18,6 @@ our $ignore_same_state_changes //= 0;
 package Class::StateMachine::Private;
 
 use 5.010001;
-
-sub _eval_states {
-    # we want the state declarations evaluated inside a clean
-    # environment (lexical free):
-    eval $_[0]
-}
 
 use strict;
 use warnings;
