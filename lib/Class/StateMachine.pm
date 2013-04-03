@@ -247,7 +247,6 @@ sub _state_isa_from_derived {
 # use Data::Dumper;
 sub _statemachine_mro {
     my $stash = shift;
-    # print Dumper $stash;
     _move_state_methods if @state_methods;
     my $base_class = ${$stash->{base_class}};
     my $state = ${$stash->{state}};
@@ -259,9 +258,10 @@ sub _statemachine_mro {
     }
 
     # workaround bug on early mro implementations where the first
-    # class on the list returned was always discarded:
-    my $state_class = pop @classes;
-    [ $state_class, grep mro::get_pkg_gen($_), @classes, @linear ]
+    # class on the list returned was always discarded. Also, as we may
+    # have inserted methods from this callback, the state class should
+    # be searched again, so we hardcode it in the list even when empty.
+    [ $classes[0], grep mro::get_pkg_gen($_), @classes, @linear ]
 }
 
 MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
