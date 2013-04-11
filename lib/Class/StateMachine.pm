@@ -41,10 +41,14 @@ my %class_state_isa;
 
 sub _debug {
     my $self = shift;
-    my $class = Class::StateMachine::ref($self);
-    my $state = $state{$self} // '<undef>';
-    my $addr = refaddr($self);
-    warn "${class}[$addr/$state]> @_\n";
+    if (length(my $class = Class::StateMachine::ref($self))) {
+        my $state = $state{$self} // '<undef>';
+        my $addr = refaddr($self);
+        warn "${class}[$addr/$state]> @_\n";
+    }
+    else {
+        warn "${self}> @_\n";
+    }
 }
 
 sub _state {
@@ -675,7 +679,8 @@ This module internally plays with the inheritance chain creating new
 classes and reblessing objects on the fly and (ab)using the L<mro>
 mechanism in funny ways.
 
-The objects state is maintained inside a L<Hash::Util::FieldHash>.
+The objects state is maintained using L<Hash::Util::FieldHash>
+objects.
 
 =head1 BUGS
 
