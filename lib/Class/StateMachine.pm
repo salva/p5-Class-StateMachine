@@ -74,8 +74,9 @@ sub _state {
             return $state{$self} if $state_changed{$self};
         }
         if (my $on_leave = $on_leave_state{$self}) {
-            while (defined(my $cb = shift @$on_leave)) {
-                $cb->();
+            while (defined(my $cb_and_args = shift @$on_leave)) {
+                my $cb = shift @$cb_and_args;
+                ref $cb ? $cb->(@$cb_and_args) : $self->$cb(@$cb_and_args);
                 return $state{$self} if $state_changed{$self};
             }
         }
@@ -159,9 +160,9 @@ sub _delay_once {
 }
 
 sub _on_leave_state {
-    @_ == 2 or croak 'Usage: $self->on_leave_state($callback)';
-    my ($self, $cb) = @_;
-    push @{$on_leave_state{$self} //= []}, $cb if defined $cb;
+    my $self = shift;
+    @_ or croak 'Usage: $self->on_leave_state($callback, @args)';
+    push @{$on_leave_state{$self} //= []}, [@_] if defined $_[0];
 }
 
 sub _bootstrap_state_class {
@@ -622,9 +623,15 @@ $old_state, the requested state change is canceled.
 X<enter_state>This method is called just after changing the state to
 the new value.
 
-=item $self->on_leave_state($callback)
+=item $self->on_leave_state($callback, @args)
 
 The given callback is called when the state changes.
+
+C<$callback> may be a reference to a subroutine or a method name. It
+is called respectively as follows:
+
+  $callback->(@args);      # $callback is a CODE reference
+  $self->$callback(@args); # $callback is a method name
 
 If the calling the C<leave_state> method is also defined, it is called first.
 
