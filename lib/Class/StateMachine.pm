@@ -35,6 +35,7 @@ fieldhash my %state;
 fieldhash my %state_changed;
 fieldhash my %delayed;
 fieldhash my %delayed_once;
+fieldhash my %on_leave_state;
 
 my %class_bootstrapped;
 my %class_state_isa;
@@ -71,6 +72,12 @@ sub _state {
             $debug and _debug($self, "calling leave_state($old_state, $new_state)");
             $leave->($self, $old_state, $new_state);
             return $state{$self} if $state_changed{$self};
+        }
+        if (my $on_leave = $on_leave_state{$self}) {
+            while (defined(my $cb = shift @$on_leave)) {
+                $cb->();
+                return $state{$self} if $state_changed{$self};
+            }
         }
 
         my $base_class = ref($self);
@@ -149,6 +156,12 @@ sub _delay_once {
     }
     $delayed_once{$self}{$method}++
         or _delay($self, $method);
+}
+
+sub _on_leave_state {
+    @_ == 2 or croak 'Usage: $self->on_leave_state($callback)';
+    my ($self, $cb) = @_;
+    push @{$on_leave_state{$self} //= []}, $cb if defined $cb;
 }
 
 sub _bootstrap_state_class {
@@ -284,6 +297,7 @@ sub MODIFY_CODE_ATTRIBUTES {
 *bless = \&Class::StateMachine::Private::_bless;
 *delay_until_next_state = \&Class::StateMachine::Private::_delay;
 *delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
+*on_leave_state = \&Class::StateMachine::Private::_on_leave_state;
 *set_state_isa = \&Class::StateMachine::Private::_set_state_isa;
 *state_isa = \&Class::StateMachine::Private::_state_isa;
 
@@ -542,6 +556,8 @@ Note that they can be defined using the C<OnState> attribute:
   sub enter_state :OnState(angry) { shift->bark }
   sub enter_state :OnState(tired) { shift->lie_down }
 
+The methoc C<on_leave_state> can also be used to register per-object
+callbacks that are run just before changing the object state.
 
 =head2 API
 
@@ -572,14 +588,17 @@ Changes the object state.
 
 This method calls back the methods C<check_state>, C<leave_state> and
 C<enter_state> if they are defined in the class or any of its
-subclasses for the corresponding state.
+subclasses for the corresponding state and any callback registered
+using the C<on_leave_state> method.
 
 Until version 0.21, when C<$new_state> was equal to the current object
 state, this method would not invoke callback methods (C<enter_state>,
 C<leave_state>, etc.). On version 0.22 this special casing was
 removed.
 
-The variable 
+Setting the variable
+C<$Class::StateMachine::ignore_same_state_changes> to a true value
+restores the old behavior.
 
 =over 4
 
@@ -602,6 +621,15 @@ $old_state, the requested state change is canceled.
 
 X<enter_state>This method is called just after changing the state to
 the new value.
+
+=item $self->on_leave_state($callback)
+
+The given callback is called when the state changes.
+
+If the calling the C<leave_state> method is also defined, it is called first.
+
+The method may be called repeatly from the same state and the
+callbacks will be executed in FIFO order.
 
 =item $self->delay_until_next_state
 

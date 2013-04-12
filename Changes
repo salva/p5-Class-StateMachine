@@ -1,6 +1,7 @@
 Revision history for Perl extension Class::StateMachine.
 
 0.23
+      - add support for the on_leave_state feature
       - some internal lexical variables from Class::StateMachine were
         leaking into the environment used to evaluate state names from
         OnState declarations
