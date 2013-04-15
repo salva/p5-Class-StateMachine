@@ -31,8 +31,8 @@ use Package::Stash;
 use Sub::Name;
 use Scalar::Util qw(refaddr);
 
-fieldhash our %state;
-fieldhash our %state_changed; # accessed directly by Class::StateMachine::Declarative::Builder
+fieldhash my %state;
+fieldhash my %state_changed;
 fieldhash my %delayed;
 fieldhash my %delayed_once;
 fieldhash my %on_leave_state;
@@ -42,13 +42,15 @@ my %class_state_isa;
 
 sub _debug {
     my $self = shift;
+    require Time::HiRes;
     if (length(my $class = Class::StateMachine::ref($self))) {
         my $state = $state{$self} // '<undef>';
         my $addr = refaddr($self);
-        warn "${class}[$addr/$state]> @_\n";
+        warn sprintf "%08.3f %s[%x/%s|sc:%d]> %s\n",
+            Time::HiRes::time(), $class, $addr, $state, $state_changed{$self}, "@_";
     }
     else {
-        warn "${self}> @_\n";
+        warn sprintf "%08.3f %s> %s\n", Time::HiRes::time(), $self, "@_";
     }
 }
 
@@ -164,6 +166,14 @@ sub _on_leave_state {
     my $self = shift;
     @_ or croak 'Usage: $self->on_leave_state($callback, @args)';
     push @{$on_leave_state{$self} //= []}, [@_] if defined $_[0];
+}
+
+sub _state_changed_on_call {
+    my $self = shift;
+    my $cb = shift;
+    local $state_changed{$self} if $state_changed{$self};
+    ref $cb ? $cb->(@_) : $self->$cb($@_);
+    return $state_changed{$self};
 }
 
 sub _bootstrap_state_class {
@@ -300,6 +310,7 @@ sub MODIFY_CODE_ATTRIBUTES {
 *delay_until_next_state = \&Class::StateMachine::Private::_delay;
 *delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
 *on_leave_state = \&Class::StateMachine::Private::_on_leave_state;
+*state_changed_on_call = \&Class::StateMachine::Private::_has_state_changed_on_call;
 *set_state_isa = \&Class::StateMachine::Private::_set_state_isa;
 *state_isa = \&Class::StateMachine::Private::_state_isa;
 
