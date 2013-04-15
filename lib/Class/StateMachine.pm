@@ -4,7 +4,7 @@ package Class::StateMachine::Private;
 
 sub _eval_states {
     # we want the state declarations evaluated inside a clean
-    # environment (lexical free):
+    # environment (lexicaly free):
     eval $_[0]
 }
 
@@ -31,8 +31,8 @@ use Package::Stash;
 use Sub::Name;
 use Scalar::Util qw(refaddr);
 
-fieldhash my %state;
-fieldhash my %state_changed;
+fieldhash our %state;
+fieldhash our %state_changed; # accessed directly by Class::StateMachine::Declarative::Builder
 fieldhash my %delayed;
 fieldhash my %delayed_once;
 fieldhash my %on_leave_state;
@@ -76,6 +76,7 @@ sub _state {
         if (my $on_leave = $on_leave_state{$self}) {
             while (defined(my $cb_and_args = shift @$on_leave)) {
                 my $cb = shift @$cb_and_args;
+                $debug and _debug($self, "calling on_leave_state hook $cb");
                 ref $cb ? $cb->(@$cb_and_args) : $self->$cb(@$cb_and_args);
                 return $state{$self} if $state_changed{$self};
             }
