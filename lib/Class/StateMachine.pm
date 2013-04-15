@@ -172,8 +172,8 @@ sub _state_changed_on_call {
     my $self = shift;
     my $cb = shift;
     local $state_changed{$self} if $state_changed{$self};
-    ref $cb ? $cb->(@_) : $self->$cb($@_);
-    return $state_changed{$self};
+    ref $cb ? $cb->(@_) : $self->$cb(@_);
+    $state_changed{$self};
 }
 
 sub _bootstrap_state_class {
@@ -310,7 +310,7 @@ sub MODIFY_CODE_ATTRIBUTES {
 *delay_until_next_state = \&Class::StateMachine::Private::_delay;
 *delay_once_until_next_state = \&Class::StateMachine::Private::_delay_once;
 *on_leave_state = \&Class::StateMachine::Private::_on_leave_state;
-*state_changed_on_call = \&Class::StateMachine::Private::_has_state_changed_on_call;
+*state_changed_on_call = \&Class::StateMachine::Private::_state_changed_on_call;
 *set_state_isa = \&Class::StateMachine::Private::_set_state_isa;
 *state_isa = \&Class::StateMachine::Private::_state_isa;
 
