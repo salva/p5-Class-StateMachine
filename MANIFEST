@@ -6,3 +6,4 @@ t/Class-StateMachine.t
 lib/Class/StateMachine.pm
 examples/dog.pl
 META.yml                                 Module meta-data (added by MakeMaker)
+t/pods.t

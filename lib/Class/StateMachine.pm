@@ -10,7 +10,7 @@ sub _eval_states {
 
 package Class::StateMachine;
 
-our $VERSION = '0.22';
+our $VERSION = '0.23';
 
 our $debug                     //= 0;
 our $ignore_same_state_changes //= 0;
