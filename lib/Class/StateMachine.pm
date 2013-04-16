@@ -46,8 +46,8 @@ sub _debug {
     if (length(my $class = Class::StateMachine::ref($self))) {
         my $state = $state{$self} // '<undef>';
         my $addr = refaddr($self);
-        warn sprintf "%08.3f %s[%x/%s|sc:%d]> %s\n",
-            Time::HiRes::time(), $class, $addr, $state, $state_changed{$self}, "@_";
+        warn sprintf "%08.3f %s[%x/%s%s]> %s\n",
+            Time::HiRes::time(), $class, $addr, $state, ($state_changed{$self} ? '|sc' : ''), "@_";
     }
     else {
         warn sprintf "%08.3f %s> %s\n", Time::HiRes::time(), $self, "@_";
