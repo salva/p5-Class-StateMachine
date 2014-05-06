@@ -1,5 +1,9 @@
 Revision history for Perl extension Class::StateMachine.
 
+0.24  May 6, 2014
+      - work around for MRO bug on perls prior to 5.16 was generating
+        warnings on later perl versions
+
 0.23  Apr 16, 2013
       - add support for state_changed_on_call
       - add support for on_leave_state feature

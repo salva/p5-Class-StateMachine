@@ -10,7 +10,7 @@ sub _eval_states {
 
 package Class::StateMachine;
 
-our $VERSION = '0.23';
+our $VERSION = '0.24';
 
 our $debug                     //= 0;
 our $ignore_same_state_changes //= 0;
@@ -273,6 +273,10 @@ sub _state_isa_from_derived {
     wantarray ? @isa : $isa[1];
 }
 
+# we make $^V into a constant so that it gets optimized away at
+# compile time:
+use constant _perl_version => $^V;
+
 # use Data::Dumper;
 sub _statemachine_mro {
     my $stash = shift;
@@ -286,11 +290,13 @@ sub _statemachine_mro {
         push @classes, map join('::', $_, '__methods__', $state), @derived;
     }
 
-    # workaround bug on early mro implementations where the first
-    # class on the list returned was always discarded. Also, as we may
-    # have inserted methods from this callback, the state class should
-    # be searched again, so we hardcode it in the list even when empty.
-    [ $classes[0], grep mro::get_pkg_gen($_), @classes, @linear ]
+    ( _perl_version >= 5.016000
+      ? [ grep mro::get_pkg_gen($_), @classes, @linear ]
+      # workaround bug on early mro implementations where the first
+      # class on the list returned was always discarded. Also, as we may
+      # have inserted methods from this callback, the state class should
+      # be searched again, so we hardcode it in the list even when empty.
+      : [ $classes[0], grep mro::get_pkg_gen($_), @classes, @linear ] )
 }
 
 MRO::Define::register_mro('statemachine' => \&_statemachine_mro);
@@ -753,7 +759,7 @@ The C<dog.pl> example included within the package.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2003-2006, 2011-2013 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
+Copyright (C) 2003-2006, 2011-2014 by Salvador FandiE<ntilde>o (sfandino@yahoo.com).
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself.
