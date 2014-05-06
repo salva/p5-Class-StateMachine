@@ -704,8 +704,6 @@ Class::StateMachine magic.
 
 Sets a submethod for a given class/state combination.
 
-=back
-
 =item Class::StateMachine::set_state_isa($class, $state, @isa)
 
 Allows to set one state as derived from others.
@@ -717,6 +715,8 @@ may change at any time!
 
 Returns the list of states from which the given C<$state> derives
 including itself and C<__any__>.
+
+=back
 
 =head2 Debugging
 
