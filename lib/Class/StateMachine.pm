@@ -106,6 +106,7 @@ sub _state {
             $debug and _debug($self, "running delayed action $action");
             if (ref $action) {
                 $self->$action;
+            }
             elsif (my $method = $self->can($action)) {
                 $self->$method;
             }
