@@ -104,7 +104,12 @@ sub _state {
         for (0..$delayed_top) {
             my $action = shift @$delayed;
             $debug and _debug($self, "running delayed action $action");
-            $self->$action;
+            if (ref $action) {
+                $self->$action;
+            }
+            elsif (my $method = $self->can($action)) {
+                $self->$method;
+            }
             return $state{$self} if $state_changed{$self};
         }
     }
